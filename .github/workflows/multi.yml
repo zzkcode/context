@@ -30,6 +30,7 @@ jobs:
           - ppc64el
           - s390x
         include:
+          - { arch: powerpc, distro: jessie, archived: true }
           - { arch: mips, distro: buster }
 
     steps:
@@ -71,8 +72,18 @@ jobs:
           options: -v ${{ github.workspace }}:/boost-root -w /boost-root
           run: |
             set -eu
-            echo "::group::Install GCC"
+            echo "::group::lscpu"
+              lscpu
+            echo "::endgroup::"
+            echo "::group::/etc/apt/sources.list"
+              ${{ ! matrix.archived }} || sed -i 's/deb.debian/archive.debian/' /etc/apt/sources.list
+              cat /etc/apt/sources.list
+            echo "::endgroup::"
+            echo "::group::Update repository"
+              ${{ ! matrix.archived }} || echo 'APT::Get::AllowUnauthenticated "true";' >> /etc/apt/apt.conf
               apt-get -o Acquire::Retries=3 update
+            echo "::endgroup::"
+            echo "::group::Install GCC"
               apt-get -o Acquire::Retries=3 -yq --no-install-suggests --no-install-recommends install g++
             echo "::endgroup::"
             echo "::group::GCC info"
@@ -81,8 +92,11 @@ jobs:
             echo "::group::Build B2"
               ./bootstrap.sh
             echo "::endgroup::"
-            echo "::group::Toolset info"
+            echo "::group::Boost.Config info"
               ./b2 libs/config/test//print_config_info
+            echo "::endgroup::"
+            echo "::group::Boost.Predef info"
+              ./b2 libs/predef/test//info_as_c -a --verbose-test
             echo "::endgroup::"
 
             echo "::group::Run tests"
@@ -135,8 +149,11 @@ jobs:
         if: ${{ runner.os == 'Windows' }}
         run: .\bootstrap.bat && echo "$pwd" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-      - name: Dump toolset info
+      - name: Boost.Config info
         run: b2 libs/config/test//print_config_info toolset=${{ matrix.toolset }} ${{ matrix.options }}
+
+      - name: Boost.Predef info
+        run: b2 libs/predef/test//info_as_c -a --verbose-test toolset=${{ matrix.toolset }} ${{ matrix.options }}
 
       - name: Build and test
         run: b2 libs/context/test toolset=${{ matrix.toolset }} ${{ matrix.options }}
